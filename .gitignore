@@ -1,0 +1,4 @@
+__pycache__/
+# client personal data - never commit (public repo)
+reports/clients.py
+reports/output/
