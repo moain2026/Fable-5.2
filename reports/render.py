@@ -7,11 +7,15 @@ import sys
 
 import weasyprint
 
-from clients import AXES, CLIENTS
+from clients import AXES, CLIENTS, QUOTED_FINDINGS
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "output")
 DATE_AR = "9 نوفمبر 2026"
+LOCK_TEXT = "تفاصيل ومواضع الخطأ مرصودة في الفحص البرمجي — تُعالج جذرياً عند إعادة البناء"
+NOTE_TEXT = "تم إصدار هذا التقرير بناءً على الفحص الآلي لمحتوى الملف المرسل وبنيته الهندسية وفق معايير الفرز المعتمدة لدى المؤسسة."
+LOCK_SVG = ('<svg class="lk" width="11" height="13" viewBox="0 0 22 26"><rect x="2" y="11" width="18" height="14" rx="3" fill="#0f2a4a"/>'
+            '<path d="M6 11V7a5 5 0 0 1 10 0v4" fill="none" stroke="#0f2a4a" stroke-width="3"/><circle cx="11" cy="18" r="2.2" fill="#c9a227"/></svg>')
 WA = "966509563048"
 
 SEV = {
@@ -34,6 +38,12 @@ def t(s):
 def fn(s):
     """علامات LRM حول المقاطع العربية داخل نص لاتيني ليبقى الترتيب صحيحاً."""
     return re.sub(r'([\u0600-\u06FF]+)', '\u200e\\1\u200e', s)
+
+
+def file_html(c):
+    if c.get("file_display"):
+        return html.escape(c["file_display"])
+    return f'<span class="en">{html.escape(fn(c["file"]))}</span>'
 
 
 def color_for(score):
@@ -122,13 +132,17 @@ td.k { width: 140px; font-weight: 700; }
 .quotes { margin: 3px 0 2px; }
 .q { display: inline-block; direction: ltr; unicode-bidi: embed; font-family: 'Noto Sans Mono','DejaVu Sans Mono',monospace; font-size: 7.8pt; background: #fff; border: 1px dashed #b0b8c4; border-radius: 4px; padding: 0 6px; margin: 2px 0 2px 4px; color: #3e4c59; }
 .find p { margin: 1px 0; line-height: 1.5; }
+.lock { display: inline-block; background: #fff; border: 1px solid #c9a227; color: #0f2a4a; border-radius: 12px; padding: 0 10px; font-size: 7.8pt; font-weight: 700; margin: 2px 0; }
+.lock .lk { vertical-align: -2px; margin-left: 5px; }
+.pg { color: #52606d; font-size: 8pt; }
 .impact { font-size: 8.5pt; color: #52606d; }
 .impact b { color: #1f2933; }
 .kw { display: flex; align-items: center; margin: 1px 0; }
-.kw .l { width: 210px; }
+.kw .l { flex: 0 0 210px; }
+.kw .dots { flex: 0 0 125px; white-space: nowrap; }
 .kw .dots span { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-left: 3px; background: #f5c6c0; }
 .kw .dots span.on { background: #1e8449; }
-.kw .n { margin-right: 8px; font-family: 'Noto Sans'; font-size: 8.5pt; color: #52606d; direction: ltr; }
+.kw .n { flex: 0 0 48px; margin-right: 6px; text-align: right; font-family: 'Noto Sans'; font-size: 8.5pt; color: #52606d; direction: ltr; unicode-bidi: embed; white-space: nowrap; }
 .legend span { display: inline-block; margin-left: 14px; font-size: 8pt; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-left: 4px; vertical-align: middle; }
 .strong { background: #eaf6ee; border-radius: 10px; padding: 4px 14px; }
@@ -157,7 +171,7 @@ def build(c):
 <div class="meta">رقم التقرير: <span class="en">{c["report_no"]}</span><br>تاريخ الفحص: {DATE_AR}</div></div>''')
     p.append(f'''<div class="info">
 <div><b>صاحب الملف</b>{c["name_ar"]}</div>
-<div><b>الملف المفحوص</b><span class="en">{html.escape(fn(c["file"]))}</span> ({c["pages"]} ص)</div>
+<div><b>الملف المفحوص</b>{file_html(c)} <span class="pg">{c["pages_ar"]}</span></div>
 <div><b>المجال المستهدف</b>{c["field"]}</div></div>''')
     p.append(f'''<div class="scorebox"><div class="g">{gauge(score)}</div><div class="v">
 <h2 style="color:{sc}">النتيجة: {c["verdict"]}</h2>
@@ -175,10 +189,13 @@ def build(c):
     p.append(f'<div class="sec"><h3>كيف قرأ نظام الفرز ملفك؟</h3><table>{trs}</table></div>')
 
     p.append('<div class="sec pb"><h3>الملاحظات المكتشفة داخل الملف</h3>'
-             '<p class="impact" style="margin-bottom:8px">النصوص داخل الإطارات منقولة حرفياً من ملفك كما قرأها النظام.</p>')
+             f'<p class="impact" style="margin-bottom:8px">النصوص داخل الإطارات في أول {QUOTED_FINDINGS} ملاحظات منقولة حرفياً من ملفك كما قرأها النظام. باقي الملاحظات مرصودة بمواضعها الدقيقة في الفحص البرمجي.</p>')
     for i, (sev, title, quotes, desc, impact) in enumerate(c["findings"], 1):
         lab, col, bg = SEV[sev]
-        qs = "".join(f'<span class="q">{html.escape(fn(q))}</span>' for q in quotes)
+        if i <= QUOTED_FINDINGS and quotes:
+            qs = "".join(f'<span class="q">{html.escape(fn(q))}</span>' for q in quotes)
+        else:
+            qs = f'<span class="lock">{LOCK_SVG}{LOCK_TEXT}</span>'
         p.append(f'''<div class="find" style="background:{bg};border-color:{col}">
 <div class="top"><h4><span class="num">#{i:02d}</span>{t(title)}</h4><span class="sev" style="background:{col}">{lab}</span></div>
 <div class="quotes">{qs}</div><p>{t(desc)}</p><p class="impact"><b>الأثر:</b> {t(impact)}</p></div>''')
@@ -205,11 +222,11 @@ def build(c):
 <ul><li>سيرة ذاتية عربي + إنجليزي</li><li>متوافقة مع أنظمة <span class="en">ATS</span></li><li>مكتوبة لوظيفتك من خبرتك الحقيقية</li><li>خطاب تقديم هدية</li><li>ملفات <span class="en">Word + PDF</span> وتعديلان مجاناً</li><li>جاهزة خلال 24 إلى 48 ساعة</li></ul>
 <div class="price"><div class="wa">للطلب أو الاستفسار عبر واتساب:<br><span class="en">wa.me/{WA}</span></div>
 <div class="tag">العرض الحالي<big>49 ريال</big></div></div>
-<p class="note">تم إعداد هذا التقرير بناءً على الفحص الآلي لمحتوى الملف المرسل وبنيته، والدرجة تقييم تقديري وفق معايير الفرز المعتمدة لدى المؤسسة.</p></div>''')
+<p class="note">{NOTE_TEXT}</p></div>''')
 
     doc = f'<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="author" content="Al-Abbasi Soft"><title>تقرير فحص ATS - {c["name_en"]}</title><style>{CSS}</style></head><body>{"".join(p)}</body></html>'
     os.makedirs(OUT, exist_ok=True)
-    out = os.path.join(OUT, c["out"])
+    out = os.path.join(OUT, c["out"] + ".pdf")
     weasyprint.HTML(string=doc, base_url=HERE).write_pdf(out)
     return out
 
